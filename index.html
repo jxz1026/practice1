@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>냉털셰프 (Fridge Chef) - 냉장고 속 재료로 만드는 AI 레시피</title>
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- A. 헤더 -->
+    <header class="header">
+      <div class="header-content">
+        <h1 class="logo">🍳 냉털셰프</h1>
+        <p class="tagline">냉장고 속 재료로 오늘의 맞춤 메뉴를 찾아보세요.</p>
+      </div>
+    </header>
+
+    <!-- 공통 알림/상태 영역 (접근성: aria-live) -->
+    <div id="statusMessage" class="status-banner hidden" role="status" aria-live="polite"></div>
+
+    <main class="main-content">
+      <!-- B. 식재료 입력 및 관리 -->
+      <section class="card input-section" aria-labelledby="section-ingredients-title">
+        <h2 id="section-ingredients-title" class="section-title">1. 식재료 입력</h2>
+        <p class="section-desc">냉장고에 남아 있는 재료를 하나씩 넣어주세요. (최소 1개, 최대 20개)</p>
+
+        <form id="ingredientForm" class="ingredient-input-group" onsubmit="return false;">
+          <label for="ingredientInput" class="visually-hidden">식재료 이름 입력</label>
+          <input 
+            type="text" 
+            id="ingredientInput" 
+            class="input-field" 
+            placeholder="예: 양파, 달걀, 두부 등" 
+            maxlength="30"
+            autocomplete="off"
+          >
+          <button type="button" id="btnAddIngredient" class="btn btn-primary">추가</button>
+        </form>
+
+        <!-- 예시 재료 채우기 / 전체 비우기 버튼 -->
+        <div class="quick-actions">
+          <button type="button" id="btnFillSample" class="btn-text">✨ 예시 재료 채우기</button>
+          <button type="button" id="btnClearIngredients" class="btn-text text-danger hidden">전체 비우기</button>
+        </div>
+
+        <!-- 식재료 칩 목록 -->
+        <div class="chip-container" id="ingredientChips" aria-label="입력된 식재료 목록">
+          <p class="empty-hint" id="emptyIngredientHint">아직 추가된 식재료가 없습니다. 재료를 입력하거나 예시 재료를 채워보세요.</p>
+        </div>
+      </section>
+
+      <!-- C. 선택 조건 입력 -->
+      <section class="card options-section" aria-labelledby="section-options-title">
+        <h2 id="section-options-title" class="section-title">2. 조리 조건 선택 (선택 사항)</h2>
+
+        <div class="options-grid">
+          <!-- 인원수 -->
+          <div class="form-group">
+            <label for="servingsSelect" class="form-label">인원수</label>
+            <select id="servingsSelect" class="select-field">
+              <option value="1">1인분</option>
+              <option value="2" selected>2인분 (기본)</option>
+              <option value="3">3인분</option>
+              <option value="4">4인분</option>
+              <option value="5">5인분</option>
+              <option value="6">6인분 이상</option>
+            </select>
+          </div>
+
+          <!-- 조리 시간 -->
+          <div class="form-group">
+            <label for="timeLimitSelect" class="form-label">최대 조리 시간</label>
+            <select id="timeLimitSelect" class="select-field">
+              <option value="15">15분 이내 (초간단)</option>
+              <option value="30" selected>30분 이내 (기본)</option>
+              <option value="45">45분 이내</option>
+              <option value="">시간제한 없음</option>
+            </select>
+          </div>
+
+          <!-- 제외/알레르기 재료 -->
+          <div class="form-group full-width">
+            <label for="excludedInput" class="form-label">
+              제외하거나 주의할 재료 <span class="label-badge">알레르기 참고</span>
+            </label>
+            <input 
+              type="text" 
+              id="excludedInput" 
+              class="input-field" 
+              placeholder="쉼표(,)로 구분 (예: 땅콩, 갑각류, 우유)"
+              maxlength="100"
+            >
+            <span class="field-hint">※ 알레르기 정보는 참고 조건일 뿐 안전을 100% 보장하지 않습니다. 조리 전 반드시 성분을 확인하세요.</span>
+          </div>
+
+          <!-- 선호 조건 -->
+          <div class="form-group full-width">
+            <label for="preferenceInput" class="form-label">선호하는 요리 스타일</label>
+            <input 
+              type="text" 
+              id="preferenceInput" 
+              class="input-field" 
+              placeholder="예: 매콤하게, 국물 요리, 기름기 적게, 다이어트식"
+              maxlength="100"
+            >
+          </div>
+        </div>
+
+        <!-- D. 추천 실행 CTA -->
+        <div class="cta-container">
+          <button type="button" id="btnGetRecipes" class="btn btn-action">
+            <span class="btn-text-content">🍳 맞춤 요리 추천받기</span>
+            <span class="spinner hidden" aria-hidden="true"></span>
+          </button>
+        </div>
+      </section>
+
+      <!-- E. 레시피 결과 영역 -->
+      <section id="recipeSection" class="recipe-section hidden" aria-labelledby="section-recipe-title">
+        <div class="section-header-flex">
+          <h2 id="section-recipe-title" class="section-title">🍽️ 추천 요리 레시피</h2>
+          <button type="button" id="btnRefreshRecipes" class="btn btn-secondary">🔄 다른 레시피 다시 받기</button>
+        </div>
+
+        <!-- 안전 안내 문구 -->
+        <div class="safety-notice" role="note">
+          <span class="notice-icon">⚠️</span>
+          <p>
+            레시피는 AI가 생성한 참고 정보입니다. 조리 전 재료의 신선도와 식품 표시를 확인하고, 
+            알레르기 유발 성분 및 교차오염 여부를 직접 확인해 주세요.
+          </p>
+        </div>
+
+        <!-- 레시피 카드 목록 -->
+        <div id="recipeCardsContainer" class="recipe-cards-container"></div>
+      </section>
+
+      <!-- F. 피드백 작성 영역 -->
+      <section class="card feedback-form-section" aria-labelledby="section-feedback-title">
+        <h2 id="section-feedback-title" class="section-title">💬 서비스 피드백 보내기</h2>
+        <p class="section-desc">서비스 이용 경험을 들려주세요. 피드백은 아래 공개 목록에 공유됩니다.</p>
+
+        <form id="feedbackForm" onsubmit="return false;">
+          <div class="feedback-inputs">
+            <!-- 유형 -->
+            <div class="form-group">
+              <label for="feedbackType" class="form-label">피드백 유형 <span class="required">*</span></label>
+              <select id="feedbackType" class="select-field" required>
+                <option value="칭찬">칭찬 👏</option>
+                <option value="개선 의견" selected>개선 의견 💡</option>
+                <option value="오류 신고">오류 신고 🚨</option>
+              </select>
+            </div>
+
+            <!-- 별점 -->
+            <div class="form-group">
+              <label for="feedbackRating" class="form-label">만족도 (선택)</label>
+              <select id="feedbackRating" class="select-field">
+                <option value="">선택 안 함</option>
+                <option value="5">⭐⭐⭐⭐⭐ (5점)</option>
+                <option value="4">⭐⭐⭐⭐ (4점)</option>
+                <option value="3">⭐⭐⭐ (3점)</option>
+                <option value="2">⭐⭐ (2점)</option>
+                <option value="1">⭐ (1점)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 본문 -->
+          <div class="form-group">
+            <label for="feedbackContent" class="form-label">
+              내용 <span class="required">*</span> (5자 ~ 500자)
+            </label>
+            <textarea 
+              id="feedbackContent" 
+              class="textarea-field" 
+              rows="3" 
+              placeholder="소중한 의견을 적어주세요. (이름, 전화번호 등 개인정보는 절대 적지 마세요)" 
+              minlength="5" 
+              maxlength="500" 
+              required
+            ></textarea>
+            <div class="char-counter"><span id="feedbackCharCount">0</span>/500자</div>
+          </div>
+
+          <div class="feedback-submit-row">
+            <p class="privacy-notice">※ 피드백은 누구나 볼 수 있는 목록에 공개되므로 개인정보 입력에 주의해 주세요.</p>
+            <button type="button" id="btnSubmitFeedback" class="btn btn-primary">
+              <span class="btn-text-content">피드백 남기기</span>
+              <span class="spinner hidden" aria-hidden="true"></span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- G. 최신 피드백 목록 -->
+      <section class="card feedback-list-section" aria-labelledby="section-feedback-list-title">
+        <div class="section-header-flex">
+          <h2 id="section-feedback-list-title" class="section-title">📝 최근 남겨진 피드백</h2>
+          <button type="button" id="btnReloadFeedback" class="btn-text">🔄 새로고침</button>
+        </div>
+
+        <div id="feedbackList" class="feedback-list" aria-live="polite">
+          <p class="loading-text">피드백 목록을 불러오는 중...</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- 푸터 -->
+    <footer class="footer">
+      <p>© 냉털셰프 (Fridge Chef) — 남은 식재료를 맛있는 요리로 변신시켜 드립니다.</p>
+    </footer>
+  </div>
+
+  <script src="/scripts/app.js"></script>
+</body>
+</html>
+
